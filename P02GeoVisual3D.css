@@ -1,0 +1,25 @@
+:root {
+    /* Definir variables de color */
+    /* https: //commons.wikimedia.org/wiki/Category:SVG_Azulejos_in_the_Alhambra#/media/File:Mosaico_Nazar%C3%AD_Avi%C3%B3n.svg */
+    --light-color: #53723f; /* verde */
+    --dark-blue: #020528;/* azul negro */
+    --brown: #a28564;/* marron */
+    --yellow: #c99736;/* amarillo */
+    --black: #020202;/* negro */
+    --gray: #d0ccc7; /* gris */
+}
+
+body {
+    /* set margin to 0 and overflow to hidden, to go fullscreen */
+    margin: 0;
+    overflow: hidden;
+}
+
+canvas {
+    /* set canvas to fill the entire screen */
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
