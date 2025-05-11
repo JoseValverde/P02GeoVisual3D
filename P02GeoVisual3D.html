@@ -56,14 +56,10 @@
         webGLRenderer.setSize(window.innerWidth, window.innerHeight);
         webGLRenderer.shadowMapEnabled = true;
 
-        var shape = createMesh(new THREE.ShapeGeometry(drawShape()));
-        // add the sphere to the scene
-        scene.add(shape);
-
-        duplicateElement(shape, scene, 25, { x: 100, y: 0, z: 0 });
-        duplicateElement(shape, scene, 25, { x: -100, y: 0, z: 0 });
-        duplicateElement(shape, scene, 25, { x: 0, y: 100, z: 0 });
-        duplicateElement(shape, scene, 25, { x: 0, y: -100, z: 0 });
+        // Creamos la variable shape pero no la inicializamos aún
+        var shape;
+        
+        // Las duplicaciones serán manejadas después de aplicar la extrusión
 
         // Ajustar la posición inicial de la cámara para alejarla más del objeto
         camera.position.x = -180;
@@ -77,14 +73,14 @@
         );
         spotLight.position.set(70, 170, 70);
         spotLight.intensity = 0.7;
-        spotLight.target = shape;
+        // No asignamos target aquí porque shape aún no está creado
         scene.add(spotLight);
         
         // Añadir segunda luz para iluminar mejor desde otro ángulo
         var spotLight2 = new THREE.DirectionalLight(0xffffff);
         spotLight2.position.set(-50, 80, 30);
         spotLight2.intensity = 0.5;
-        spotLight2.target = shape;
+        // No asignamos target aquí porque shape aún no está creado
         scene.add(spotLight2);
         
         // Añadir luz ambiental suave
@@ -116,10 +112,10 @@
             this.wireframe = false;
 
             this.asGeom = function () {
-                // remove the old plane
-                scene.remove(shape);
-                // create a new one
-
+                // Limpiar la escena de todas las formas anteriores
+                clearScene();
+                
+                // Crear las opciones de extrusión
                 var options = {
                     amount: controls.amount,
                     bevelThickness: controls.bevelThickness,
@@ -130,9 +126,17 @@
                     steps: controls.steps
                 };
 
+                // Crear la forma extruida principal
                 shape = createMesh(new THREE.ExtrudeGeometry(drawShape(), options));
-                // add it to the scene.
+                
+                // Añadir la forma principal a la escena
                 scene.add(shape);
+                
+                // Duplicar la forma extruida en diferentes direcciones
+                duplicateElement(shape, scene, 25, { x: 100, y: 0, z: 0 });
+                duplicateElement(shape, scene, 25, { x: -100, y: 0, z: 0 });
+                duplicateElement(shape, scene, 25, { x: 0, y: 100, z: 0 });
+                duplicateElement(shape, scene, 25, { x: 0, y: -100, z: 0 });
             };
             
             this.toggleRotation = function() {
@@ -140,9 +144,12 @@
             };
             
             this.toggleWireframe = function() {
-                if (shape && shape.material) {
-                    shape.material.wireframe = controls.wireframe;
-                }
+                // Aplicar wireframe a todos los objetos Mesh en la escena
+                scene.traverse(function(object) {
+                    if (object instanceof THREE.Mesh && object.material) {
+                        object.material.wireframe = controls.wireframe;
+                    }
+                });
             };
         };
 
@@ -191,25 +198,63 @@
 
         // Función para duplicar elementos en la escena
         function duplicateElement(element, scene, copies, transform) {
+            // Obtener la configuración actual de extrusión
+            var options = {
+                amount: controls.amount,
+                bevelThickness: controls.bevelThickness,
+                bevelSize: controls.bevelSize,
+                bevelSegments: controls.bevelSegments,
+                bevelEnabled: controls.bevelEnabled,
+                curveSegments: controls.curveSegments,
+                steps: controls.steps
+            };
+            
+            // Obtener la forma base para volver a crear la geometría extruida
+            var svgShape = drawShape();
+            
             for (let i = 1; i <= copies; i++) {
-                const clone = element.clone();
-                clone.position.x += i * (transform.x || 0); // Desplazamiento en X
-                clone.position.y += i * (transform.y || 0); // Desplazamiento en Y
-                clone.position.z += i * (transform.z || 0); // Desplazamiento en Z
+                // Crear una nueva geometría extruida para cada copia
+                var newGeom = new THREE.ExtrudeGeometry(svgShape, options);
+                // Aplicar la misma transformación que la original
+                newGeom.applyMatrix(new THREE.Matrix4().makeTranslation(-390, -74, 0));
+                
+                // Crear un nuevo mesh con la geometría extruida
+                var meshMaterial = new THREE.MeshPhongMaterial({
+                    color: getColorFromCSS('--yellow'), 
+                    shininess: 100, 
+                    specular: 0x111111,
+                    side: THREE.DoubleSide
+                });
+                
+                var newElement = new THREE.Mesh(newGeom, meshMaterial);
+                
+                // Aplicar las mismas escalas que el elemento original
+                newElement.scale.x = 0.1;
+                newElement.scale.y = 0.1;
+                
+                // Posicionar según los parámetros de transformación
+                newElement.position.x = i * (transform.x || 0); // Desplazamiento en X
+                newElement.position.y = i * (transform.y || 0); // Desplazamiento en Y
+                newElement.position.z = i * (transform.z || 0); // Desplazamiento en Z
 
-                clone.rotation.x += i * (transform.rx || 0); // Rotación en X
-                clone.rotation.y += i * (transform.ry || 0); // Rotación en Y
-                clone.rotation.z += i * (transform.rz || 0); // Rotación en Z
+                newElement.rotation.x = i * (transform.rx || 0); // Rotación en X
+                newElement.rotation.y = i * (transform.ry || 0); // Rotación en Y
+                newElement.rotation.z = i * (transform.rz || 0); // Rotación en Z
 
-                scene.add(clone);
+                scene.add(newElement);
             }
         }
 
         function render() {
             stats.update();
 
-            if (controls.autoRotate) { // Cambiar a controls.autoRotate directamente
-                shape.rotation.z += 0.005;
+            if (controls.autoRotate) {
+                // Rotar todos los objetos Mesh en la escena
+                scene.traverse(function(object) {
+                    if (object instanceof THREE.Mesh) {
+                        object.rotation.z += 0.005;
+                    }
+                });
             }
 
             orbit.update();
@@ -232,6 +277,22 @@
             document.getElementById("Stats-output").appendChild(stats.domElement);
 
             return stats;
+        }
+        
+        // Función para limpiar todas las formas de la escena
+        function clearScene() {
+            // Crear una copia de los objetos de la escena para evitar problemas al modificar durante la iteración
+            var objectsToRemove = [];
+            scene.traverse(function(object) {
+                if (object instanceof THREE.Mesh) {
+                    objectsToRemove.push(object);
+                }
+            });
+            
+            // Eliminar todos los objetos Mesh de la escena
+            objectsToRemove.forEach(function(object) {
+                scene.remove(object);
+            });
         }
     }
     window.onload = init;
