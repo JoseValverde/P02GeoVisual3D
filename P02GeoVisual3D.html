@@ -110,10 +110,12 @@
             this.steps = 2;
             this.autoRotate = false; 
             this.wireframe = false;
+            this.showAxisHelper = true; // Nueva opción para mostrar/ocultar la cruceta XYZ
+            this.showCenterPoints = true; // Nueva opción para mostrar/ocultar los puntos centrales
 
             this.asGeom = function () {
                 // Limpiar la escena de todas las formas anteriores
-                clearScene();
+                clearScene(scene);
                 
                 // Crear las opciones de extrusión
                 var options = {
@@ -127,16 +129,27 @@
                 };
 
                 // Crear la forma extruida principal
-                shape = createMesh(new THREE.ExtrudeGeometry(drawShape(), options));
+                shape = createMesh(new THREE.ExtrudeGeometry(drawShape(), options), getColorFromCSS('--yellow'));
+                shape.name = 'mainMesh'; // Asignamos nombre al objeto principal
                 
                 // Añadir la forma principal a la escena
                 scene.add(shape);
                 
                 // Duplicar la forma extruida en diferentes direcciones
-                duplicateElement(shape, scene, 25, { x: 100, y: 0, z: 0 });
-                duplicateElement(shape, scene, 25, { x: -100, y: 0, z: 0 });
-                duplicateElement(shape, scene, 25, { x: 0, y: 100, z: 0 });
-                duplicateElement(shape, scene, 25, { x: 0, y: -100, z: 0 });
+                duplicateElement(shape, scene, 25, { x: 100, y: 0, z: 0 }, options, drawShape);
+                duplicateElement(shape, scene, 25, { x: -100, y: 0, z: 0 }, options, drawShape);
+                duplicateElement(shape, scene, 25, { x: 0, y: 100, z: 0 }, options, drawShape);
+                duplicateElement(shape, scene, 25, { x: 0, y: -100, z: 0 }, options, drawShape);
+                
+                // Añadir la cruceta XYZ en el punto central (origen)
+                if(controls.showAxisHelper) {
+                    addAxisHelper(scene, 100, controls.showCenterPoints);
+                }
+                
+                // Añadir puntos en los centros si está activada la opción y no lo hicimos ya
+                if(controls.showCenterPoints && !controls.showAxisHelper) {
+                    addCenterPoints(scene);
+                }
             };
             
             this.toggleRotation = function() {
@@ -151,6 +164,30 @@
                     }
                 });
             };
+            
+            this.toggleAxisHelper = function() {
+                // Mostrar u ocultar la cruceta XYZ según el estado del control
+                var axisHelper = scene.getObjectByName("axisHelper");
+                if (axisHelper) {
+                    axisHelper.visible = controls.showAxisHelper;
+                } else if (controls.showAxisHelper) {
+                    addAxisHelper(scene, 100, controls.showCenterPoints);
+                }
+            };
+            
+            this.toggleCenterPoints = function() {
+                // Mostrar u ocultar los puntos de centro de rotación
+                scene.traverse(function(object) {
+                    if (object.name && object.name.startsWith('centerPoint')) {
+                        object.visible = controls.showCenterPoints;
+                    }
+                });
+                
+                // Si no hay puntos de centro añadidos, agregarlos
+                if (controls.showCenterPoints && !scene.getObjectByName('centerPoint-main')) {
+                    addCenterPoints(scene);
+                }
+            };
         };
 
         var gui = new dat.GUI();
@@ -163,6 +200,8 @@
         gui.add(controls, 'steps', 1, 5).step(1).onChange(controls.asGeom);
         gui.add(controls, 'autoRotate').onChange(controls.toggleRotation);
         gui.add(controls, 'wireframe').onChange(controls.toggleWireframe);
+        gui.add(controls, 'showAxisHelper').onChange(controls.toggleAxisHelper);
+        gui.add(controls, 'showCenterPoints').onChange(controls.toggleCenterPoints);
 
         controls.asGeom();
         render();
@@ -171,78 +210,6 @@
             var svgString = document.querySelector("#pajarita-path").getAttribute("d");
             var shape = transformSVGPathExposed(svgString);
             return shape;
-        }
-
-        function createMesh(geom) {
-            geom.applyMatrix(new THREE.Matrix4().makeTranslation(-390, -74, 0));
-
-            // assign two materials
-            var meshMaterial = new THREE.MeshPhongMaterial({
-                color: getColorFromCSS('--yellow'), 
-                shininess: 100, 
-                specular: 0x111111,
-                side: THREE.DoubleSide // Renderiza ambos lados
-            });
-            var mesh = new THREE.Mesh(geom, meshMaterial);
-            
-            mesh.scale.x = 0.1;
-            mesh.scale.y = 0.1;
-
-            /*mesh.rotation.z = Math.PI;
-            mesh.rotation.x = -1.1;
-            */
-            // Centrar la figura en el origen
-            mesh.position.set(0, 0, 0);
-            return mesh;
-        }
-
-        // Función para duplicar elementos en la escena
-        function duplicateElement(element, scene, copies, transform) {
-            // Obtener la configuración actual de extrusión
-            var options = {
-                amount: controls.amount,
-                bevelThickness: controls.bevelThickness,
-                bevelSize: controls.bevelSize,
-                bevelSegments: controls.bevelSegments,
-                bevelEnabled: controls.bevelEnabled,
-                curveSegments: controls.curveSegments,
-                steps: controls.steps
-            };
-            
-            // Obtener la forma base para volver a crear la geometría extruida
-            var svgShape = drawShape();
-            
-            for (let i = 1; i <= copies; i++) {
-                // Crear una nueva geometría extruida para cada copia
-                var newGeom = new THREE.ExtrudeGeometry(svgShape, options);
-                // Aplicar la misma transformación que la original
-                newGeom.applyMatrix(new THREE.Matrix4().makeTranslation(-390, -74, 0));
-                
-                // Crear un nuevo mesh con la geometría extruida
-                var meshMaterial = new THREE.MeshPhongMaterial({
-                    color: getColorFromCSS('--yellow'), 
-                    shininess: 100, 
-                    specular: 0x111111,
-                    side: THREE.DoubleSide
-                });
-                
-                var newElement = new THREE.Mesh(newGeom, meshMaterial);
-                
-                // Aplicar las mismas escalas que el elemento original
-                newElement.scale.x = 0.1;
-                newElement.scale.y = 0.1;
-                
-                // Posicionar según los parámetros de transformación
-                newElement.position.x = i * (transform.x || 0); // Desplazamiento en X
-                newElement.position.y = i * (transform.y || 0); // Desplazamiento en Y
-                newElement.position.z = i * (transform.z || 0); // Desplazamiento en Z
-
-                newElement.rotation.x = i * (transform.rx || 0); // Rotación en X
-                newElement.rotation.y = i * (transform.ry || 0); // Rotación en Y
-                newElement.rotation.z = i * (transform.rz || 0); // Rotación en Z
-
-                scene.add(newElement);
-            }
         }
 
         function render() {
@@ -265,7 +232,6 @@
         }
 
         function initStats() {
-
             var stats = new Stats();
             stats.setMode(0); // 0: fps, 1: ms
 
@@ -277,22 +243,6 @@
             document.getElementById("Stats-output").appendChild(stats.domElement);
 
             return stats;
-        }
-        
-        // Función para limpiar todas las formas de la escena
-        function clearScene() {
-            // Crear una copia de los objetos de la escena para evitar problemas al modificar durante la iteración
-            var objectsToRemove = [];
-            scene.traverse(function(object) {
-                if (object instanceof THREE.Mesh) {
-                    objectsToRemove.push(object);
-                }
-            });
-            
-            // Eliminar todos los objetos Mesh de la escena
-            objectsToRemove.forEach(function(object) {
-                scene.remove(object);
-            });
         }
     }
     window.onload = init;
